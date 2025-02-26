@@ -13,8 +13,9 @@ def log_return(spot):
     return np.log(spot).diff()
 
 
-class RiskReversalMomentum():
-    def __init__(self, symbol, start, end, amount, tc, decay, deltaShift, deltaATM):
+class RiskReversalMomentum(object):
+
+    def __init__(self, symbol, start, end, amount, tc=0):
         self.symbol = symbol
         self.start = start
         self.end = end
@@ -22,9 +23,9 @@ class RiskReversalMomentum():
         self.tc = tc
         self.results = None
         self.get_data()
-        self.decay = decay
-        self.deltaShift = deltaShift
-        self.deltaATM = deltaATM
+        self.decay = 0.97
+        self.deltaShift = 0.4
+        self.deltaATM = 1
         self.get_data()
 
     def get_data(self, data_folder=""):
