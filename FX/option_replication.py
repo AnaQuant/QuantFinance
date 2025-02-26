@@ -1,5 +1,6 @@
 import numpy as np
-
+import pandas as pd
+import os
 
 def smoothing_tstats(e):
     smt_param = 1
@@ -8,34 +9,50 @@ def smoothing_tstats(e):
     else:
         return np.sin(e * np.pi / (2 * smt_param))
 
-class RiskReversal:
-    def __init__(self, spot, IR1, IR2, RR, imp_vol, decay, deltaShift, deltaATM):
-        self.spot = spot
-        self.IR1 = IR1
-        self.IR2 = IR2
-        self.RR = RR
-        self.imp_vol = imp_vol
+def log_return(spot):
+    return np.log(spot).diff()
+
+
+class RiskReversalMomentum():
+    def __init__(self, symbol, start, end, amount, tc, decay, deltaShift, deltaATM):
+        self.symbol = symbol
+        self.start = start
+        self.end = end
+        self.amount = amount
+        self.tc = tc
+        self.results = None
+        self.get_data()
         self.decay = decay
         self.deltaShift = deltaShift
         self.deltaATM = deltaATM
+        self.get_data()
 
-    # The spot given in the csv is the baseFX
-    def log_return(self, spot):
+    def get_data(self, data_folder=""):
+        ccy_pair = self.symbol
+        filename = f"mktdata_{ccy_pair}.csv"
+        filepath = os.path.join(data_folder, filename) if data_folder else filename
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File '{filepath}' not found!")
+        raw = pd.read_csv(filepath, index_col=0, parse_dates=True, dayfirst=True).dropna()
+        raw['return'] = np.log(raw['Spot'] / raw['Spot'].shift(1))
+        self.data = raw
 
-        return np.log(spot).diff()
 
-    def realised_vol(self, spot_return):
+    def realised_vol(self):
+        spot_return = self.data['return']
         return_ewma = spot_return.ewm(com=self.decay / (1.0 - self.decay), adjust=False).mean()
         adjReturn = spot_return - return_ewma
         adjReturnSqr = 252 * adjReturn * adjReturn
         variance_ewma = adjReturnSqr.ewm(com=self.decay / (1.0 - self.decay), adjust=False).mean()
+
         return np.sqrt(variance_ewma)
 
-    def modelVol(self, realVol, imp_vol):
-        vol = np.maximum(realVol, imp_vol / 100)
-        return vol
+    # def modelVol(self, realVol, imp_vol):
+    #     vol = np.maximum(realVol, imp_vol / 100)
+    #     return vol
 
-    def tstat_deltaRR(self, RR):
+    def tstat_deltaRR(self):
+        RR = self.data['RiskRev']
         deltaRR = RR.diff()
         deltaRRsqr = deltaRR * deltaRR
         beta = deltaRR.ewm(com=self.decay / (1.0 - self.decay), adjust=False).mean()
@@ -46,17 +63,15 @@ class RiskReversal:
 
         return result
 
-    def get_data(self):
-        pass
 
     def run_strategy(self):
-        pass
+        signal = self.tstat_deltaRR()
+        output = self.data.copy().dropna()
+        output['position'] = signal
+        output['strategy'] = output['position'].shift(1) * output['return']
 
     def plot_results(self):
         pass
-
-
-
 
     # def commonTerm(IRb, IRf, vol, T):
     #     res = (IRb - IRf) * T / 100 + vol * vol * T / 2
