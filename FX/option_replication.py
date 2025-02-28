@@ -15,18 +15,17 @@ def log_return(spot):
 
 class RiskReversalMomentum(object):
 
-    def __init__(self, symbol, start, end, amount, tc=0):
+    def __init__(self, symbol, start, end, amount, data_folder="", tc=0):
         self.symbol = symbol
         self.start = start
         self.end = end
         self.amount = amount
         self.tc = tc
         self.results = None
-        self.get_data()
+        self.get_data(data_folder=data_folder)
         self.decay = 0.97
         self.deltaShift = 0.4
         self.deltaATM = 1
-        self.get_data()
 
     def get_data(self, data_folder=""):
         ccy_pair = self.symbol
@@ -67,12 +66,26 @@ class RiskReversalMomentum(object):
 
     def run_strategy(self):
         signal = self.tstat_deltaRR()
-        output = self.data.copy().dropna()
-        output['position'] = signal
-        output['strategy'] = output['position'].shift(1) * output['return']
+        signal = signal.apply(smoothing_tstats, args=())
+        data = self.data.copy().dropna()
+        data['position'] = signal
+        data['strategy'] = data['position'].shift(1) * data['return']
+        data['creturns'] =  self.amount * data['return'].cumsum().apply(np.exp)
+        data['cstrategy'] = self.amount * data['strategy'].cumsum().apply(np.exp)
+        self.results = data
+
 
     def plot_results(self):
-        pass
+        ''' Plots the cumulative performance of the trading strategy
+        compared to the symbol.
+        '''
+        if self.results is None:
+            print('No results to plot yet. Run a strategy.')
+        title = '%s | TC = %.4f' % (self.symbol, self.tc)
+        self.results[['creturns', 'cstrategy']].plot(title=title,
+                                                     figsize=(10, 6))
+
+
 
     # def commonTerm(IRb, IRf, vol, T):
     #     res = (IRb - IRf) * T / 100 + vol * vol * T / 2
