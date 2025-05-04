@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+from scipy.stats import norm
 
 def smoothing_tstats(e):
     smt_param = 1
@@ -12,6 +13,13 @@ def smoothing_tstats(e):
 def log_return(spot):
     return np.log(spot).diff()
 
+def common_term(ir_dom, ir_for, vol, T):
+    res = (ir_dom - ir_for) * T / 100 + vol * vol * T / 2
+    return res
+
+def model_vol(real_vol, imp_vol):
+    vol = np.maximum(real_vol, imp_vol / 100)
+    return vol
 
 class RiskReversalMomentum(object):
 
@@ -47,9 +55,7 @@ class RiskReversalMomentum(object):
 
         return np.sqrt(variance_ewma)
 
-    # def modelVol(self, realVol, imp_vol):
-    #     vol = np.maximum(realVol, imp_vol / 100)
-    #     return vol
+
 
     def tstat_deltaRR(self):
         RR = self.data['RiskRev']
@@ -86,30 +92,27 @@ class RiskReversalMomentum(object):
                                                      figsize=(10, 6))
 
 
+#TODO fix this function to fit into the class
+    def calcHraw(self, spot, IR1, IR2, imp_vol):
+        deltaShift = 0.4
+        deltaATM = 0.5
+        # Realised volatility:
+        realVol = self.realised_vol
+        vol = model_vol(realVol, imp_vol)
 
-    # def commonTerm(IRb, IRf, vol, T):
-    #     res = (IRb - IRf) * T / 100 + vol * vol * T / 2
-    #     return res
-    #
-    # def calcHraw(spot, IR1, IR2, RR, imp_vol, decay, deltaShift, deltaATM):
-    #     # Realised volatility:
-    #     returnBaseCur = log_return(spot)
-    #     realVol = realised_vol(returnBaseCur, decay)
-    #     vol = modelVol(realVol, imp_vol)
-    #
-    #     # Risk reversal stuff:
-    #     tstats = tstat_deltaRR(RR, decay)
-    #     smtTstats = tstats.apply(smoothing_tstats, args=())
-    #     Delta4Ks = smtTstats * deltaShift + deltaATM
-    #     d1 = norm.ppf(Delta4Ks)
-    #
-    #     T = 4 / 52
-    #     hraw = 0
-    #     comTerm = commonTerm(IR1, IR2, vol, T)
-    #
-    #     for i in range(1, 6):
-    #         strike = spot.shift(i) / np.exp(np.sqrt(T) * d1 * vol.shift(i) - comTerm.shift(i))
-    #         delta = norm.cdf((np.log(spot / strike) + comTerm) / (vol * np.sqrt(T)))
-    #         hraw = hraw + delta
-    #
-    #     return hraw / 5.0
+        # Risk reversal stuff:
+        tstats = self.tstat_deltaRR()
+        smtTstats = tstats.apply(smoothing_tstats, args=())
+        Delta4Ks = smtTstats * deltaShift + deltaATM
+        d1 = norm.ppf(Delta4Ks)
+
+        T = 4 / 52
+        hraw = 0
+        comTerm = common_term(IR1, IR2, vol, T)
+
+        for i in range(1, 6):
+            strike = spot.shift(i) / np.exp(np.sqrt(T) * d1 * vol.shift(i) - comTerm.shift(i))
+            delta = norm.cdf((np.log(spot / strike) + comTerm) / (vol * np.sqrt(T)))
+            hraw = hraw + delta
+
+        return hraw / 5.0
