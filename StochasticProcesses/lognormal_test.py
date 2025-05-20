@@ -177,7 +177,8 @@ if __name__ == "__main__":
     # OPTION 2: Direct function call (easier for PyCharm)
     # Change these values as needed
     ticker = "AAPL"
-    start_date = "2023-01-01"
-    end_date = None  # Set to None for current date or specify an end date
+    start_date = "2020-01-01"
+    end_date = '2025-04-30'  # Set to None for current date or specify an end date
 
     analyze_lognormality(ticker, start_date, end_date)
+
