@@ -15,7 +15,7 @@ class SMAVectorBacktester(object):
 
     def get_data(self):
 
-        raw = pd.read_csv('currencies_universe.csv', index_col=0, parse_dates=True, dayfirst=True).dropna()
+        raw = pd.read_csv('../Data/currencies_universe.csv', index_col=0, parse_dates=True, dayfirst=True).dropna()
         raw.index = pd.to_datetime(raw.index, dayfirst=True)
         raw = pd.DataFrame(raw[self.symbol])
         raw = raw.loc[self.start:self.end]
