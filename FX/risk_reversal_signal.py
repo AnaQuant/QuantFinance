@@ -23,7 +23,7 @@ def model_vol(real_vol, imp_vol):
 
 class RiskReversalMomentum(object):
 
-    def __init__(self, symbol, start, end, amount, data_folder="", tc=0):
+    def __init__(self, symbol, start, end, amount, data_folder="../Data/", tc=0):
         self.symbol = symbol
         self.start = start
         self.end = end
