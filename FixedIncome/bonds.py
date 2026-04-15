@@ -11,10 +11,6 @@ from typing import Optional, List
 from dataclasses import dataclass
 
 
-# ============================================================================
-# Object-Oriented Interface (Recommended)
-# ============================================================================
-
 @dataclass
 class CashFlow:
     """Represents a single cash flow."""
@@ -340,20 +336,19 @@ class CallableBond(Bond):
 # Functional Interface (Legacy, kept for backwards compatibility)
 # ============================================================================
 
-def bond_price(face_value, coupon_rate, periods, market_rate, frequency=1):
+def bond_price(face, coupon_rate, ytm, years):
     """
     Calculate the price of a bond using the present value of cash flows.
-    :param face_value: Face value of the bond (e.g., 1000)
+    :param face: Face value of the bond (e.g., 1000)
     :param coupon_rate: Annual coupon rate (e.g., 0.05 for 5%)
-    :param periods: Total number of periods until maturity
-    :param market_rate: Market interest rate per period (decimal form)
-    :param frequency: Number of coupon payments per year
+    :param ytm: Yield to maturity (decimal)
+    :param years: Years to maturity (annual coupon payments assumed)
     :return: Bond price
     """
-    coupon_payment = (coupon_rate * face_value) / frequency
-    discount_factors = [(1 + market_rate / frequency) ** -(i + 1) for i in range(periods)]
+    coupon_payment = coupon_rate * face
+    discount_factors = [(1 + ytm) ** -(i + 1) for i in range(years)]
     present_value_coupons = sum(coupon_payment * df for df in discount_factors)
-    present_value_face = face_value * discount_factors[-1]
+    present_value_face = face * discount_factors[-1]
     return present_value_coupons + present_value_face
 
 
@@ -390,9 +385,68 @@ def callable_bond_price(face_value, coupon_rate, periods, market_rate, call_pric
     :param frequency: Number of coupon payments per year
     :return: Callable bond price
     """
-    regular_price = bond_price(face_value, coupon_rate, periods, market_rate, frequency)
+    regular_price = bond_price(face_value, coupon_rate, market_rate, periods)
     call_price_discounted = call_price / (1 + market_rate / frequency) ** call_period
     return min(regular_price, call_price_discounted)
+
+
+def compute_dv01(face, coupon_rate, ytm, years):
+    """
+    Compute DV01 by pricing the bond at ytm and ytm + 1bp.
+
+    DV01 = P(y) - P(y + 0.0001), where face is already expressed per £100.
+
+    Parameters
+    ----------
+    face : float
+        Face value of the bond
+    coupon_rate : float
+        Annual coupon rate (decimal)
+    ytm : float
+        Yield to maturity (decimal)
+    years : int
+        Years to maturity (annual coupon payments assumed)
+
+    Returns
+    -------
+    float
+        DV01 per face-value units
+    """
+    return bond_price(face, coupon_rate, ytm, years) - bond_price(face, coupon_rate, ytm + 0.0001, years)
+
+
+def compute_convexity(face, coupon_rate, ytm, years, dy=0.0001):
+    """
+    Compute convexity using a central-difference bump-and-reprice.
+
+    Convexity = [P(y+dy) - 2*P(y) + P(y-dy)] / (P(y) * dy^2)
+
+    Convexity measures the curvature of the price-yield relationship — the
+    second-order term that DV01 (a linear approximation) ignores. For a given
+    yield shock Δy, the full price change is approximately:
+
+        ΔP ≈ -DV01 * Δy + 0.5 * Convexity * P * Δy^2
+
+    Parameters
+    ----------
+    face : float
+        Face value of the bond
+    coupon_rate : float
+        Annual coupon rate (decimal)
+    ytm : float
+        Yield to maturity (decimal)
+    years : int
+        Years to maturity (annual coupon payments assumed)
+    dy : float, optional
+        Yield bump size for finite-difference approximation (default: 1bp)
+
+    Returns
+    -------
+    float
+        Convexity (dimensionless)
+    """
+    p = bond_price(face, coupon_rate, ytm, years)
+    return (bond_price(face, coupon_rate, ytm + dy, years) - 2 * p + bond_price(face, coupon_rate, ytm - dy, years)) / (p * dy ** 2)
 
 
 def bond_duration(price, face_value, coupon_rate, periods, market_rate, frequency=1):
@@ -423,7 +477,7 @@ if __name__ == "__main__":
     call_period = 5  # Callable in 5 years
     frequency = 1  # Annual payments
 
-    price = bond_price(face_value, coupon_rate, periods, market_rate, frequency)
+    price = bond_price(face_value, coupon_rate, market_rate, periods)
     print(f"Bond Price: {price:.2f}")
 
     ytm = yield_to_maturity(price, face_value, coupon_rate, periods, frequency)
