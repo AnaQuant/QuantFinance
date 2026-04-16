@@ -202,127 +202,35 @@ usd_data = data['USD_Z0']
 curve = create_yield_curve_from_excel_row(usd_data, row_index=-1, currency='USD')
 ```
 
-### 5. pricing.py - Advanced Bond Pricing
-
-Integration with stochastic interest rate models.
-
-```python
-from FixedIncome import Bond
-from FixedIncome.pricing import BondPricerWithIRModel, compare_pricing_methods
-from StochasticProcesses import CIRProcess, BDT
-
-# Create a bond
-bond = Bond(face_value=1000, coupon_rate=0.05, maturity=10, frequency=1)
-
-# Price with CIR model
-cir = CIRProcess(initial_value=0.05, theta=0.5, mu=0.04, sigma=0.02)
-pricer = BondPricerWithIRModel(cir)
-
-result = pricer.price(bond, n_paths=10000, n_steps=100)
-print(f"CIR Price: ${result['price']:.2f}")
-print(f"Std Error: ${result['std_error']:.2f}")
-print(f"95% CI: [{result['confidence_interval'][0]:.2f}, "
-      f"{result['confidence_interval'][1]:.2f}]")
-
-# Price with BDT model
-volatilities = [0.02] * 9
-bdt = BDT(r0=0.05, volatilities=volatilities, dt=1.0)
-pricer_bdt = BondPricerWithIRModel(bdt)
-
-result_bdt = pricer_bdt.price(bond)
-print(f"BDT Price: ${result_bdt['price']:.2f}")
-
-# Compare methods
-comparison = compare_pricing_methods(
-    bond=bond,
-    market_rate=0.04,
-    ir_model=cir,
-    n_paths=10000,
-    n_steps=100
-)
-
-print(f"Closed-form: ${comparison['closed_form']:.2f}")
-print(f"Stochastic: ${comparison['stochastic']:.2f}")
-print(f"Difference: {comparison['relative_difference']:.2f}%")
-```
-
 ## Complete Workflow Example
 
-Here's a complete workflow from data fetching to bond pricing:
-
 ```python
-from datetime import datetime
 from FixedIncome import Bond, YieldCurve
 from FixedIncome.data_fetchers import fetch_us_treasury_data, parse_treasury_data_to_yield_curves
 from FixedIncome.interpolation import NelsonSiegelInterpolator
-from FixedIncome.pricing import BondPricerWithIRModel
-from StochasticProcesses import CIRProcess
 
-# 1. Fetch market data
+# 1. Fetch market data and build curve
 df = fetch_us_treasury_data(year=2025)
 curves = parse_treasury_data_to_yield_curves(df)
+yc = curves[max(curves.keys())]
 
-# 2. Get latest yield curve
-latest_date = max(curves.keys())
-yc = curves[latest_date]
+# 2. Attach interpolator
+yc.set_interpolator(NelsonSiegelInterpolator())
 
-# 3. Add interpolation
-ns = NelsonSiegelInterpolator()
-yc.set_interpolator(ns)
-
-# 4. Create a bond
+# 3. Create a bond and price off the curve
 bond = Bond(face_value=1000, coupon_rate=0.05, maturity=10, frequency=2)
-
-# 5. Price using flat curve
-flat_rate = yc.get_yield(10.0)
-price_flat = bond.price(flat_rate)
-print(f"Price (flat curve): ${price_flat:.2f}")
-
-# 6. Price using full yield curve (approximate)
 cash_flows = bond.get_cash_flows()
-price_curve = sum(cf.amount * yc.get_discount_factor(cf.time) for cf in cash_flows)
-print(f"Price (yield curve): ${price_curve:.2f}")
+price = sum(cf.amount * yc.get_discount_factor(cf.time) for cf in cash_flows)
+print(f"Price (yield curve): ${price:.2f}")
 
-# 7. Price with stochastic model
-cir = CIRProcess(
-    initial_value=yc.get_yield(0.25),
-    theta=0.5,
-    mu=yc.get_yield(10.0),
-    sigma=0.01
-)
-pricer = BondPricerWithIRModel(cir)
-result = pricer.price(bond, n_paths=5000)
-print(f"Price (CIR model): ${result['price']:.2f} ± ${result['std_error']:.2f}")
+# 4. Risk metrics
+flat_rate = yc.get_yield(10.0)
+print(f"Duration:   {bond.duration(flat_rate):.4f} years")
+print(f"Convexity:  {bond.convexity(flat_rate):.4f}")
 
-# 8. Calculate risk metrics
-duration = bond.duration(flat_rate)
-convexity = bond.convexity(flat_rate)
-print(f"\nRisk Metrics:")
-print(f"Duration: {duration:.4f} years")
-print(f"Convexity: {convexity:.4f}")
-
-# 9. Analyze yield curve shape
+# 5. Curve shape
 metrics = yc.get_shape_metrics()
-print(f"\nYield Curve Shape:")
-print(f"Level: {metrics['level']:.4%}")
-print(f"Slope (2-10): {metrics['slope_2_10']:.4%}")
-print(f"Curvature: {metrics['curvature']:.4%}")
-```
-
-## Integration with Notebooks
-
-The modules are designed to be used alongside Jupyter notebooks for exploration:
-
-```python
-# At the top of your notebook
-import sys
-sys.path.append('..')  # If notebook is in Notebooks/
-
-from FixedIncome import Bond, YieldCurve
-from FixedIncome.interpolation import CubicSplineInterpolator
-from StochasticProcesses import CIRProcess
-
-# Your analysis code here...
+print(f"Level: {metrics['level']:.4%}  Slope (2-10): {metrics['slope_2_10']:.4%}")
 ```
 
 ## Key Concepts
